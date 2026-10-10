@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: parkinson-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - parkinson-network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  python-ml-service:
+    build: ./ml
+    container_name: parkinson-ml-service
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    networks:
+      - parkinson-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  express-server:
+    build: ./server
+    container_name: parkinson-express-server
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGO_URI=mongodb://mongodb:27017/parkinson
+      - JWT_SECRET=${JWT_SECRET:-dev-local-secret-change-in-prod-12345}
+      - PYTHON_SERVICE_URL=http://python-ml-service:8000
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-no-reply@parkinson-research.org}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Parkinson's Assessment Portal}
+      - APP_BASE_URL=${APP_BASE_URL:-http://localhost:3000}
+    depends_on:
+      - mongodb
+      - python-ml-service
+    volumes:
+      - uploads-data:/usr/src/app/uploads
+    networks:
+      - parkinson-network
+
+
+  react-client:
+    build: ./client
+    container_name: parkinson-react-client
+    ports:
+      - "3000:3000"
+    depends_on:
+      - express-server
+    networks:
+      - parkinson-network
+
+volumes:
+  mongo-data:
+  uploads-data:
+
+networks:
+  parkinson-network:
+    driver: bridge

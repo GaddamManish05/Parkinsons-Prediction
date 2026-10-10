@@ -1,0 +1,72 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-python-ml:
+    name: Test Python ML Microservice
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ml/requirements.txt
+          pip install pytest httpx
+
+      - name: Run Pytest Suite
+        run: |
+          cd ml
+          python -m pytest test_ml_service.py
+
+  test-express-server:
+    name: Test Express Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd server
+          npm ci || npm install
+
+      - name: Run Server Unit Tests
+        run: |
+          cd server
+          npm test
+
+  build-react-client:
+    name: Build React Vite Client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd client
+          npm ci || npm install
+
+      - name: Build Vite Bundle
+        run: |
+          cd client
+          npm run build
