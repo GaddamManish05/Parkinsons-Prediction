@@ -56,6 +56,7 @@ export default function AdminDashboard() {
   const [selectedUserHistory, setSelectedUserHistory] = useState(null);
   const [reviewingPrediction, setReviewingPrediction] = useState(null);
   const [savingReview, setSavingReview] = useState(false);
+  const [downloadingReportId, setDownloadingReportId] = useState(null);
 
   // Pagination states for records
   const [recordsPage, setRecordsPage] = useState(1);
@@ -241,6 +242,29 @@ export default function AdminDashboard() {
     link.click();
     document.body.removeChild(link);
     setToastMessage("CSV Log exported successfully.");
+  };
+
+  const handleDownloadPDF = async (predId) => {
+    try {
+      setDownloadingReportId(predId);
+      const response = await API.get(`/api/predictions/${predId}/report`, {
+        responseType: "blob"
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Parkinson_Report_${predId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("PDF download failed:", err);
+      setError("Failed to download PDF report. Session may have expired.");
+    } finally {
+      setDownloadingReportId(null);
+    }
   };
 
   const handleSendEmails = (e) => {
@@ -715,14 +739,14 @@ export default function AdminDashboard() {
                             <button className="btn-secondary btn-small" onClick={() => setReviewingPrediction(pred)}>
                               <FaEye /> Review & Edit
                             </button>
-                            <a 
-                              href={`/api/predictions/${pred._id}/report`}
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPDF(pred._id)}
+                              disabled={downloadingReportId === pred._id}
                               className="btn-success btn-small font-semibold"
-                              target="_blank"
-                              rel="noopener noreferrer"
                             >
-                              <FaFilePdf /> PDF
-                            </a>
+                              <FaFilePdf /> {downloadingReportId === pred._id ? "..." : "PDF"}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -803,14 +827,14 @@ export default function AdminDashboard() {
 
                       <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
                         <button type="button" className="btn-secondary" onClick={() => setReviewingPrediction(null)}>Cancel</button>
-                        <a 
-                          href={`/api/predictions/${reviewingPrediction._id}/report`}
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadPDF(reviewingPrediction._id)}
+                          disabled={downloadingReportId === reviewingPrediction._id}
                           className="btn-success font-semibold"
-                          target="_blank"
-                          rel="noopener noreferrer"
                         >
-                          <FaFilePdf /> PDF Report
-                        </a>
+                          <FaFilePdf /> {downloadingReportId === reviewingPrediction._id ? "Downloading..." : "PDF Report"}
+                        </button>
                         <button 
                           type="button" 
                           className="btn-secondary" 

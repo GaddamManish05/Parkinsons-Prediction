@@ -1,7 +1,12 @@
 import axios from "axios";
 
+// Read and normalize production API base URL from Vite environment variable
+// Trailing slashes are stripped to prevent double-slash segment issues when joining endpoints
+const rawBaseURL = import.meta.env.VITE_API_URL || "";
+const baseURL = rawBaseURL.replace(/\/+$/, "");
+
 const API = axios.create({
-  baseURL: "", // standard relative path requests since we set up Vite dev proxy
+  baseURL, // Points to production backend (e.g. Render) when configured, or relative path in local dev
   timeout: 30000 // 30 seconds timeout for processing speech inference
 });
 

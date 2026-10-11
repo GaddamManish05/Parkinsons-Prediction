@@ -1,3 +1,4 @@
+process.env.NODE_ENV = "test";
 const test = require("node:test");
 const assert = require("node:assert");
 const jwt = require("jsonwebtoken");
@@ -409,6 +410,223 @@ test("Email report endpoint malformed ObjectId rejection", () => {
   assert.strictEqual(isValidObjectId("507f1f77bcf86cd799439011"), true);
   assert.strictEqual(isValidObjectId("invalid-assessment-id"), false);
   assert.strictEqual(isValidObjectId("123"), false);
+});
+
+test("CORS origin validation and allowlist logic contract", () => {
+  const defaultOrigins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173"
+  ];
+  const configuredOrigin = "https://parkinsons-portal.vercel.app";
+  const allowedOrigins = [...defaultOrigins, configuredOrigin];
+
+  const checkOrigin = (origin) => {
+    if (!origin) return true;
+    if (allowedOrigins.includes(origin)) return true;
+    if (/^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin)) return true;
+    return false;
+  };
+
+  // Local development origins
+  assert.strictEqual(checkOrigin("http://localhost:3000"), true);
+  assert.strictEqual(checkOrigin("http://127.0.0.1:3000"), true);
+  assert.strictEqual(checkOrigin("http://localhost:5173"), true);
+
+  // Production Vercel domain
+  assert.strictEqual(checkOrigin("https://parkinsons-portal.vercel.app"), true);
+  assert.strictEqual(checkOrigin("https://parkinsons-preview-123.vercel.app"), true);
+
+  // Server-to-server or curl (undefined origin)
+  assert.strictEqual(checkOrigin(undefined), true);
+
+  // Unrelated untrusted origins
+  assert.strictEqual(checkOrigin("https://malicious-site.com"), false);
+  assert.strictEqual(checkOrigin("http://attacker.org"), false);
+  assert.strictEqual(checkOrigin("https://evilvercel.app.bad.com"), false);
+});
+
+test("Python ML service URL trailing slash normalization contract", () => {
+  const normalizeUrl = (rawUrl) => (rawUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
+
+  assert.strictEqual(
+    normalizeUrl("https://parkinsons-ml.onrender.com/"),
+    "https://parkinsons-ml.onrender.com"
+  );
+  assert.strictEqual(
+    normalizeUrl("https://parkinsons-ml.onrender.com///"),
+    "https://parkinsons-ml.onrender.com"
+  );
+  assert.strictEqual(
+    normalizeUrl("https://parkinsons-ml.onrender.com"),
+    "https://parkinsons-ml.onrender.com"
+  );
+  assert.strictEqual(
+    `${normalizeUrl("https://parkinsons-ml.onrender.com/")}/predict`,
+    "https://parkinsons-ml.onrender.com/predict"
+  );
+});
+
+test("Frontend API baseURL normalization contract", () => {
+  const normalizeBaseURL = (envUrl) => (envUrl || "").replace(/\/+$/, "");
+
+  assert.strictEqual(
+    normalizeBaseURL("https://parkinsons-api-v757.onrender.com/"),
+    "https://parkinsons-api-v757.onrender.com"
+  );
+  assert.strictEqual(
+    normalizeBaseURL("https://parkinsons-api-v757.onrender.com"),
+    "https://parkinsons-api-v757.onrender.com"
+  );
+  assert.strictEqual(normalizeBaseURL(""), "");
+  assert.strictEqual(normalizeBaseURL(undefined), "");
+});
+
+// ============================================================================
+// Integration Tests: GET /api/health/ml with real Express HTTP server & Mock Python ML Service
+// ============================================================================
+
+const http = require("node:http");
+
+function createMockPythonServer(handler) {
+  const server = http.createServer((req, res) => {
+    handler(req, res);
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      resolve({
+        server,
+        url: `http://127.0.0.1:${port}`,
+        close: () => new Promise((r) => server.close(r))
+      });
+    });
+  });
+}
+
+function startExpressApp(expressApp) {
+  return new Promise((resolve) => {
+    const server = expressApp.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      resolve({
+        server,
+        url: `http://127.0.0.1:${port}`,
+        close: () => new Promise((r) => server.close(r))
+      });
+    });
+  });
+}
+
+test("Integration: GET /api/health/ml returns 200 UP when downstream Python ML service is healthy", async () => {
+  const mockPython = await createMockPythonServer((req, res) => {
+    assert.strictEqual(req.url, "/health");
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", model_loaded: true, model_version: "1.0.0" }));
+  });
+
+  const originalUrl = process.env.PYTHON_SERVICE_URL;
+  process.env.PYTHON_SERVICE_URL = mockPython.url;
+
+  const app = require("../server");
+  const expressInstance = await startExpressApp(app);
+
+  try {
+    const res = await fetch(`${expressInstance.url}/api/health/ml`);
+    assert.strictEqual(res.status, 200);
+    const data = await res.json();
+    assert.strictEqual(data.status, "UP");
+    assert.strictEqual(data.configured, true);
+    assert.strictEqual(data.pythonServiceUrl, mockPython.url);
+    assert.strictEqual(data.mlService.model_loaded, true);
+    assert.strictEqual(data.mlService.model_version, "1.0.0");
+  } finally {
+    process.env.PYTHON_SERVICE_URL = originalUrl;
+    await expressInstance.close();
+    await mockPython.close();
+  }
+});
+
+test("Integration: GET /api/health/ml returns 502 DOWN when downstream Python ML service fails", async () => {
+  const mockPython = await createMockPythonServer((req, res) => {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ detail: "Downstream model initialization failed" }));
+  });
+
+  const originalUrl = process.env.PYTHON_SERVICE_URL;
+  process.env.PYTHON_SERVICE_URL = mockPython.url;
+
+  const app = require("../server");
+  const expressInstance = await startExpressApp(app);
+
+  try {
+    const res = await fetch(`${expressInstance.url}/api/health/ml`);
+    assert.strictEqual(res.status, 502);
+    const data = await res.json();
+    assert.strictEqual(data.status, "DOWN");
+    assert.strictEqual(data.configured, true);
+    assert.strictEqual(data.pythonServiceUrl, mockPython.url);
+    assert.ok(data.error);
+  } finally {
+    process.env.PYTHON_SERVICE_URL = originalUrl;
+    await expressInstance.close();
+    await mockPython.close();
+  }
+});
+
+test("Integration: GET /api/health/ml returns 502 DOWN with timeout flag when downstream Python ML service times out", async () => {
+  const mockPython = await createMockPythonServer((req, res) => {
+    // Deliberately do not answer immediately to trigger timeout
+    setTimeout(() => {
+      try {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "ok" }));
+      } catch (_) {}
+    }, 600);
+  });
+
+  const originalUrl = process.env.PYTHON_SERVICE_URL;
+  const originalTimeout = process.env.PYTHON_HEALTH_TIMEOUT_MS;
+  process.env.PYTHON_SERVICE_URL = mockPython.url;
+  process.env.PYTHON_HEALTH_TIMEOUT_MS = "100"; // Fast 100ms timeout for test
+
+  const app = require("../server");
+  const expressInstance = await startExpressApp(app);
+
+  try {
+    const res = await fetch(`${expressInstance.url}/api/health/ml`);
+    assert.strictEqual(res.status, 502);
+    const data = await res.json();
+    assert.strictEqual(data.status, "DOWN");
+    assert.strictEqual(data.configured, true);
+    assert.strictEqual(data.timeout, true);
+  } finally {
+    process.env.PYTHON_SERVICE_URL = originalUrl;
+    process.env.PYTHON_HEALTH_TIMEOUT_MS = originalTimeout;
+    await expressInstance.close();
+    await mockPython.close();
+  }
+});
+
+test("Integration: GET /api/health/ml returns 503 DOWN when PYTHON_SERVICE_URL is not configured", async () => {
+  const originalUrl = process.env.PYTHON_SERVICE_URL;
+  delete process.env.PYTHON_SERVICE_URL;
+
+  const app = require("../server");
+  const expressInstance = await startExpressApp(app);
+
+  try {
+    const res = await fetch(`${expressInstance.url}/api/health/ml`);
+    assert.strictEqual(res.status, 503);
+    const data = await res.json();
+    assert.strictEqual(data.status, "DOWN");
+    assert.strictEqual(data.configured, false);
+    assert.strictEqual(data.pythonServiceUrl, null);
+    assert.ok(data.message.includes("not configured"));
+  } finally {
+    process.env.PYTHON_SERVICE_URL = originalUrl;
+    await expressInstance.close();
+  }
 });
 
 

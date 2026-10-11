@@ -16,7 +16,8 @@ const createPrediction = async (req, res) => {
     }
 
     const filePath = req.file.path;
-    const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || "http://127.0.0.1:8000";
+    const rawPythonUrl = process.env.PYTHON_SERVICE_URL || "http://127.0.0.1:8000";
+    const pythonServiceUrl = rawPythonUrl.replace(/\/+$/, "");
 
     // Read file and prepare multipart form-data for Python ML service
     const fileBuffer = fs.readFileSync(filePath);
@@ -24,14 +25,14 @@ const createPrediction = async (req, res) => {
     const formData = new FormData();
     formData.append("file", blob, req.file.originalname);
 
-    // Call Python ML microservice
+    // Call Python ML microservice (60s timeout accommodates Render free-tier cold starts)
     let mlResponse;
     try {
       mlResponse = await axios.post(`${pythonServiceUrl}/predict`, formData, {
         headers: {
           "Content-Type": "multipart/form-data"
         },
-        timeout: 30000
+        timeout: 60000
       });
     } catch (mlErr) {
       console.error("ML service communication failed:", mlErr.message);
@@ -170,6 +171,11 @@ const getPredictionComparison = async (req, res) => {
 
     if (!id1 || !id2) {
       return res.status(400).json({ message: "Two prediction IDs (id1 and id2) are required for comparison." });
+    }
+
+    const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+    if (!id1.match(objectIdPattern) || !id2.match(objectIdPattern)) {
+      return res.status(400).json({ message: "Invalid assessment ID format." });
     }
 
     if (id1 === id2) {
@@ -409,8 +415,12 @@ const getAllUsersAdmin = async (req, res) => {
 
 const updatePredictionReview = async (req, res) => {
   try {
+    const { id } = req.params;
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid assessment ID format." });
+    }
     const { doctorNotes, recommendations } = req.body;
-    const prediction = await Prediction.findById(req.params.id);
+    const prediction = await Prediction.findById(id);
 
     if (!prediction) {
       return res.status(404).json({ message: "Prediction not found" });
@@ -429,8 +439,12 @@ const updatePredictionReview = async (req, res) => {
 const updateUserAdmin = async (req, res) => {
   const User = require("../models/User");
   try {
+    const { id } = req.params;
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid user ID format." });
+    }
     const { name, email, role, isActive } = req.body;
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(id);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -453,13 +467,17 @@ const updateUserAdmin = async (req, res) => {
 const deleteUserAdmin = async (req, res) => {
   const User = require("../models/User");
   try {
-    const user = await User.findById(req.params.id);
+    const { id } = req.params;
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: "Invalid user ID format." });
+    }
+    const user = await User.findById(id);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    await User.deleteOne({ _id: req.params.id });
+    await User.deleteOne({ _id: id });
     res.json({ message: "User deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
@@ -491,8 +509,9 @@ const getPredictionAudio = async (req, res) => {
     const uploadsDir = path.resolve(__dirname, "../uploads");
     const requestedPath = path.resolve(__dirname, "..", prediction.voicePath);
 
-    // Strict path traversal check: ensure requested file is inside uploadsDir
-    if (!requestedPath.startsWith(uploadsDir)) {
+    // Strict path traversal check: ensure requested file is inside uploadsDir boundary
+    const uploadsDirWithSep = uploadsDir.endsWith(path.sep) ? uploadsDir : uploadsDir + path.sep;
+    if (!requestedPath.startsWith(uploadsDirWithSep)) {
       console.error(`Security Warning: Directory traversal blocked for path: ${prediction.voicePath}`);
       return res.status(403).json({ message: "Access denied." });
     }
@@ -511,6 +530,12 @@ const getPredictionAudio = async (req, res) => {
     res.setHeader("Content-Disposition", "inline");
 
     const stream = fs.createReadStream(requestedPath);
+    stream.on("error", (streamErr) => {
+      console.error("Audio ReadStream error:", streamErr);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Server error reading audio file." });
+      }
+    });
     stream.pipe(res);
   } catch (error) {
     console.error("getPredictionAudio error:", error);
