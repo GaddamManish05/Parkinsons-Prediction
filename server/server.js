@@ -140,6 +140,11 @@ app.use("/api/users", require("./routes/userRoutes"));
 app.use("/api/predictions", require("./routes/predictionRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
 
+// Direct administrative analytics route alias
+const { protect: protectAuth, admin: adminAuth } = require("./middleware/authMiddleware");
+const { getAdminRiskAnalytics } = require("./controllers/predictionController");
+app.get("/api/admin/analytics/risk", protectAuth, adminAuth, getAdminRiskAnalytics);
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   if (err.message === "Origin not allowed by CORS policy.") {

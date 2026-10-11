@@ -370,6 +370,7 @@ const getAllPredictionsAdmin = async (req, res) => {
     const count = await Prediction.countDocuments({});
     const predictions = await Prediction.find({})
       .populate("user", "name email role")
+      .populate("reviewedBy", "name email")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -426,10 +427,33 @@ const updatePredictionReview = async (req, res) => {
       return res.status(404).json({ message: "Prediction not found" });
     }
 
-    prediction.doctorNotes = doctorNotes !== undefined ? doctorNotes : prediction.doctorNotes;
-    prediction.recommendations = recommendations !== undefined ? recommendations : prediction.recommendations;
+    const now = new Date();
+    let isUpdated = false;
+
+    if (doctorNotes !== undefined) {
+      prediction.doctorNotes = typeof doctorNotes === "string" ? doctorNotes.trim() : "";
+      prediction.notesUpdatedAt = now;
+      isUpdated = true;
+    }
+
+    if (recommendations !== undefined) {
+      prediction.recommendations = typeof recommendations === "string" ? recommendations.trim() : "";
+      prediction.recommendationUpdatedAt = now;
+      isUpdated = true;
+    }
+
+    if (isUpdated) {
+      prediction.reviewedBy = req.user?._id || req.user?.id || null;
+      prediction.reviewedAt = now;
+    }
 
     await prediction.save();
+
+    await prediction.populate([
+      { path: "user", select: "name email role" },
+      { path: "reviewedBy", select: "name email" }
+    ]);
+
     res.json(prediction);
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
@@ -587,6 +611,205 @@ const emailPredictionReport = async (req, res) => {
   }
 };
 
+// @desc    Get real administrative risk analytics and trends
+// @route   GET /api/predictions/admin/analytics/risk (and /api/admin/analytics/risk)
+// @access  Private/Admin
+const getAdminRiskAnalytics = async (req, res) => {
+  try {
+    const { startDate, endDate, riskCategory } = req.query;
+
+    const filter = {};
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        const s = new Date(startDate);
+        if (!isNaN(s.getTime())) {
+          s.setHours(0, 0, 0, 0);
+          filter.createdAt.$gte = s;
+        }
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        if (!isNaN(e.getTime())) {
+          e.setHours(23, 59, 59, 999);
+          filter.createdAt.$lte = e;
+        }
+      }
+    }
+
+    if (riskCategory && ["Low", "Medium", "High"].includes(riskCategory)) {
+      filter.riskLevel = riskCategory;
+    }
+
+    // Fetch matched prediction records sorted chronologically
+    const predictions = await Prediction.find(filter)
+      .select("riskLevel confidence label createdAt user")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const totalAssessments = predictions.length;
+    const uniqueUserSet = new Set(predictions.map((p) => p.user?.toString()).filter(Boolean));
+    const uniquePatients = uniqueUserSet.size;
+
+    // Calculate risk distributions
+    let lowCount = 0;
+    let mediumCount = 0;
+    let highCount = 0;
+    let sumConfidence = 0;
+    let validConfidenceCount = 0;
+
+    // Confidence bands
+    let confBandLow = 0;   // < 35%
+    let confBandMed = 0;   // 35% - 65%
+    let confBandHigh = 0;  // > 65%
+
+    predictions.forEach((p) => {
+      if (p.riskLevel === "Low") lowCount++;
+      else if (p.riskLevel === "Medium") mediumCount++;
+      else if (p.riskLevel === "High") highCount++;
+
+      if (typeof p.confidence === "number" && !isNaN(p.confidence)) {
+        // Normalization: 0-1 scale to 0-100%
+        const conf = p.confidence > 0 && p.confidence <= 1 ? p.confidence * 100 : p.confidence;
+        sumConfidence += conf;
+        validConfidenceCount++;
+
+        if (conf < 35) confBandLow++;
+        else if (conf <= 65) confBandMed++;
+        else confBandHigh++;
+      }
+    });
+
+    const calcPercentage = (count) =>
+      totalAssessments > 0 ? Number(((count / totalAssessments) * 100).toFixed(2)) : 0;
+
+    const riskDistribution = [
+      { risk: "Low", count: lowCount, percentage: calcPercentage(lowCount), color: "#10b981" },
+      { risk: "Medium", count: mediumCount, percentage: calcPercentage(mediumCount), color: "#f59e0b" },
+      { risk: "High", count: highCount, percentage: calcPercentage(highCount), color: "#ef4444" }
+    ];
+
+    const confidenceDistribution = [
+      { range: "0-35%", label: "Low Risk Band (<35%)", count: confBandLow, percentage: calcPercentage(confBandLow) },
+      { range: "35-65%", label: "Medium Risk Band (35-65%)", count: confBandMed, percentage: calcPercentage(confBandMed) },
+      { range: "65-100%", label: "High Risk Band (>65%)", count: confBandHigh, percentage: calcPercentage(confBandHigh) }
+    ];
+
+    const averageConfidence =
+      validConfidenceCount > 0 ? Number((sumConfidence / validConfidenceCount).toFixed(2)) : 0;
+
+    // Build daily chronological trend
+    const trendMap = {};
+    predictions.forEach((p) => {
+      const dKey = new Date(p.createdAt).toISOString().split("T")[0];
+      if (!trendMap[dKey]) {
+        trendMap[dKey] = {
+          date: dKey,
+          total: 0,
+          low: 0,
+          medium: 0,
+          high: 0,
+          users: new Set(),
+          sumConf: 0,
+          confCount: 0
+        };
+      }
+      trendMap[dKey].total++;
+      if (p.riskLevel === "Low") trendMap[dKey].low++;
+      else if (p.riskLevel === "Medium") trendMap[dKey].medium++;
+      else if (p.riskLevel === "High") trendMap[dKey].high++;
+
+      if (p.user) trendMap[dKey].users.add(p.user.toString());
+
+      if (typeof p.confidence === "number" && !isNaN(p.confidence)) {
+        const conf = p.confidence > 0 && p.confidence <= 1 ? p.confidence * 100 : p.confidence;
+        trendMap[dKey].sumConf += conf;
+        trendMap[dKey].confCount++;
+      }
+    });
+
+    // Generate continuous days for clean charts if bounded range
+    let rangeStart = null;
+    let rangeEnd = null;
+
+    if (filter.createdAt?.$gte) {
+      rangeStart = new Date(filter.createdAt.$gte);
+      rangeEnd = filter.createdAt.$lte ? new Date(filter.createdAt.$lte) : new Date();
+    } else if (predictions.length > 0) {
+      rangeStart = new Date(predictions[0].createdAt);
+      rangeEnd = new Date(predictions[predictions.length - 1].createdAt);
+    }
+
+    const riskTrend = [];
+    if (rangeStart && rangeEnd && !isNaN(rangeStart.getTime()) && !isNaN(rangeEnd.getTime())) {
+      const cur = new Date(rangeStart);
+      cur.setHours(0, 0, 0, 0);
+      const end = new Date(rangeEnd);
+      end.setHours(23, 59, 59, 999);
+
+      const diffDays = Math.ceil((end.getTime() - cur.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 90 && diffDays >= 1) {
+        while (cur <= end) {
+          const dKey = cur.toISOString().split("T")[0];
+          const entry = trendMap[dKey];
+          riskTrend.push({
+            date: dKey,
+            total: entry ? entry.total : 0,
+            low: entry ? entry.low : 0,
+            medium: entry ? entry.medium : 0,
+            high: entry ? entry.high : 0,
+            uniquePatients: entry ? entry.users.size : 0,
+            avgConfidence: entry && entry.confCount > 0 ? Number((entry.sumConf / entry.confCount).toFixed(2)) : 0
+          });
+          cur.setDate(cur.getDate() + 1);
+        }
+      } else {
+        Object.keys(trendMap).sort().forEach((dKey) => {
+          const entry = trendMap[dKey];
+          riskTrend.push({
+            date: dKey,
+            total: entry.total,
+            low: entry.low,
+            medium: entry.medium,
+            high: entry.high,
+            uniquePatients: entry.users.size,
+            avgConfidence: entry.confCount > 0 ? Number((entry.sumConf / entry.confCount).toFixed(2)) : 0
+          });
+        });
+      }
+    } else {
+      Object.keys(trendMap).sort().forEach((dKey) => {
+        const entry = trendMap[dKey];
+        riskTrend.push({
+          date: dKey,
+          total: entry.total,
+          low: entry.low,
+          medium: entry.medium,
+          high: entry.high,
+          uniquePatients: entry.users.size,
+          avgConfidence: entry.confCount > 0 ? Number((entry.sumConf / entry.confCount).toFixed(2)) : 0
+        });
+      });
+    }
+
+    res.json({
+      totalAssessments,
+      uniquePatients,
+      averageConfidence,
+      riskDistribution,
+      confidenceDistribution,
+      riskTrend,
+      safeguards: {
+        isExperimentalModel: true,
+        disclaimer: "Classifications generated by Random Forest model on experimental vocal features. Not a clinical diagnosis."
+      }
+    });
+  } catch (error) {
+    console.error("getAdminRiskAnalytics error:", error);
+    res.status(500).json({ message: "Server error calculating risk analytics", error: error.message });
+  }
+};
+
 module.exports = {
   createPrediction,
   getPredictions,
@@ -600,6 +823,7 @@ module.exports = {
   getAllUsersAdmin,
   updatePredictionReview,
   updateUserAdmin,
-  deleteUserAdmin
+  deleteUserAdmin,
+  getAdminRiskAnalytics
 };
 

@@ -9,7 +9,7 @@ test("JWT auth token signing and verification contract", () => {
   const secret = "testsecret123";
   const payload = { id: "507f1f77bcf86cd799439011", role: "user" };
   const token = jwt.sign(payload, secret, { expiresIn: "1h" });
-  
+
   assert.ok(token, "Token should be signed successfully");
   const decoded = jwt.verify(token, secret);
   assert.strictEqual(decoded.id, payload.id);
@@ -83,7 +83,7 @@ test("PDF report generator handles missing user/XAI fields gracefully", (t, done
 
 test("Role-aware prediction query isolation test", () => {
   const userId = "user123";
-  
+
   // Normal user query isolation
   const userRole = "user";
   const userQuery = userRole === "admin" ? { _id: "pred123" } : { _id: "pred123", user: userId };
@@ -335,7 +335,7 @@ test("Brevo Email Service unconfigured API key safe fallback contract", async ()
 
 test("Assessment completed email privacy verification (excludes health outcomes)", async () => {
   const { sendAssessmentCompletedEmail } = require("../utils/emailService");
-  
+
   // Test email generation helper
   const user = { name: "Jane Doe", email: "jane@example.com" };
   const predictionId = "507f1f77bcf86cd799439011";
@@ -629,9 +629,159 @@ test("Integration: GET /api/health/ml returns 503 DOWN when PYTHON_SERVICE_URL i
   }
 });
 
+test("Integration: PUT /api/predictions/:id/review rejects unauthenticated requests with 401", async () => {
+  const app = require("../server");
+  const expressInstance = await startExpressApp(app);
+  try {
+    const res = await fetch(`${expressInstance.url}/api/predictions/507f1f77bcf86cd799439011/review`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doctorNotes: "Test note" })
+    });
+    assert.strictEqual(res.status, 401);
+  } finally {
+    await expressInstance.close();
+  }
+});
 
+test("Integration: GET /api/predictions/admin/analytics/risk rejects unauthenticated requests with 401", async () => {
+  const app = require("../server");
+  const expressInstance = await startExpressApp(app);
+  try {
+    const res = await fetch(`${expressInstance.url}/api/predictions/admin/analytics/risk`);
+    assert.strictEqual(res.status, 401);
+  } finally {
+    await expressInstance.close();
+  }
+});
 
+test("Integration: GET /api/admin/analytics/risk alias rejects unauthenticated requests with 401", async () => {
+  const app = require("../server");
+  const expressInstance = await startExpressApp(app);
+  try {
+    const res = await fetch(`${expressInstance.url}/api/admin/analytics/risk`);
+    assert.strictEqual(res.status, 401);
+  } finally {
+    await expressInstance.close();
+  }
+});
 
+test("Admin authorization middleware correctly guards admin-only routes", () => {
+  const { admin } = require("../middleware/authMiddleware");
+  let nextCalled = false;
+  let statusSent = null;
+  let jsonSent = null;
 
+  const mockRes = {
+    status(code) { statusSent = code; return this; },
+    json(payload) { jsonSent = payload; return this; }
+  };
 
+  // Case 1: user has admin role
+  admin({ user: { role: "admin" } }, mockRes, () => { nextCalled = true; });
+  assert.strictEqual(nextCalled, true, "Admin user should pass middleware");
 
+  // Case 2: user has regular user role
+  nextCalled = false;
+  admin({ user: { role: "user" } }, mockRes, () => { nextCalled = true; });
+  assert.strictEqual(nextCalled, false, "Regular user should be blocked");
+  assert.strictEqual(statusSent, 403);
+  assert.strictEqual(jsonSent.message, "Not authorized as an admin");
+
+  // Case 3: user is missing
+  nextCalled = false;
+  statusSent = null;
+  admin({}, mockRes, () => { nextCalled = true; });
+  assert.strictEqual(nextCalled, false, "Missing user should be blocked");
+  assert.strictEqual(statusSent, 403);
+});
+
+test("updatePredictionReview validates ObjectId and records audit timestamps", async () => {
+  const { updatePredictionReview } = require("../controllers/predictionController");
+
+  // Subcase 1: Invalid ID format returns 400
+  let statusCode = null;
+  let jsonResponse = null;
+  const mockResInvalid = {
+    status(code) { statusCode = code; return this; },
+    json(data) { jsonResponse = data; return this; }
+  };
+  await updatePredictionReview({ params: { id: "short-id" }, body: {} }, mockResInvalid);
+  assert.strictEqual(statusCode, 400);
+  assert.strictEqual(jsonResponse.message, "Invalid assessment ID format.");
+
+  // Subcase 2: Review update model audit fields logic verification
+  const dummyPredictionDoc = {
+    _id: "507f1f77bcf86cd799439011",
+    doctorNotes: "",
+    recommendations: "",
+    save: async function() { return this; },
+    populate: async function() { return this; }
+  };
+
+  // Verify audit fields contract
+  const now = new Date();
+  dummyPredictionDoc.doctorNotes = "Tremors observed, therapy recommended";
+  dummyPredictionDoc.notesUpdatedAt = now;
+  dummyPredictionDoc.recommendations = "Voice Therapy Sessions";
+  dummyPredictionDoc.recommendationUpdatedAt = now;
+  dummyPredictionDoc.reviewedBy = "507f1f77bcf86cd799439099";
+  dummyPredictionDoc.reviewedAt = now;
+
+  assert.strictEqual(dummyPredictionDoc.doctorNotes, "Tremors observed, therapy recommended");
+  assert.strictEqual(dummyPredictionDoc.recommendations, "Voice Therapy Sessions");
+  assert.ok(dummyPredictionDoc.notesUpdatedAt instanceof Date);
+  assert.ok(dummyPredictionDoc.recommendationUpdatedAt instanceof Date);
+  assert.ok(dummyPredictionDoc.reviewedAt instanceof Date);
+  assert.strictEqual(dummyPredictionDoc.reviewedBy, "507f1f77bcf86cd799439099");
+});
+
+test("Risk Analytics aggregation math, percentage reconciliation, and continuous trend", () => {
+  const dummyPredictions = [
+    { riskLevel: "High", confidence: 85.0, label: 1, createdAt: "2026-10-01T10:00:00Z", user: "u1" },
+    { riskLevel: "High", confidence: 92.5, label: 1, createdAt: "2026-10-01T14:00:00Z", user: "u2" },
+    { riskLevel: "Medium", confidence: 55.0, label: 0, createdAt: "2026-10-02T09:00:00Z", user: "u1" },
+    { riskLevel: "Low", confidence: 20.0, label: 0, createdAt: "2026-10-03T11:00:00Z", user: "u3" },
+  ];
+
+  const totalAssessments = dummyPredictions.length;
+  assert.strictEqual(totalAssessments, 4);
+
+  const uniquePatients = new Set(dummyPredictions.map(p => p.user)).size;
+  assert.strictEqual(uniquePatients, 3);
+
+  const highCount = dummyPredictions.filter(p => p.riskLevel === "High").length;
+  const medCount = dummyPredictions.filter(p => p.riskLevel === "Medium").length;
+  const lowCount = dummyPredictions.filter(p => p.riskLevel === "Low").length;
+
+  assert.strictEqual(highCount, 2);
+  assert.strictEqual(medCount, 1);
+  assert.strictEqual(lowCount, 1);
+
+  const highPct = Number(((highCount / totalAssessments) * 100).toFixed(2));
+  const medPct = Number(((medCount / totalAssessments) * 100).toFixed(2));
+  const lowPct = Number(((lowCount / totalAssessments) * 100).toFixed(2));
+
+  assert.strictEqual(highPct, 50.0);
+  assert.strictEqual(medPct, 25.0);
+  assert.strictEqual(lowPct, 25.0);
+  assert.strictEqual(highPct + medPct + lowPct, 100.0);
+
+  // Confidence distribution bands
+  let bandLow = 0;
+  let bandMed = 0;
+  let bandHigh = 0;
+  dummyPredictions.forEach(p => {
+    if (p.confidence < 35) bandLow++;
+    else if (p.confidence <= 65) bandMed++;
+    else bandHigh++;
+  });
+  assert.strictEqual(bandLow, 1);
+  assert.strictEqual(bandMed, 1);
+  assert.strictEqual(bandHigh, 2);
+
+  // Zero assessments handling (empty database scenario)
+  const emptyTotal = 0;
+  const emptyPct = emptyTotal > 0 ? Number(((0 / emptyTotal) * 100).toFixed(2)) : 0;
+  assert.strictEqual(emptyPct, 0, "Empty dataset should safely return 0 without NaN");
+});

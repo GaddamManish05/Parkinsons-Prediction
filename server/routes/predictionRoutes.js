@@ -14,12 +14,14 @@ const {
   getAllUsersAdmin,
   updatePredictionReview,
   updateUserAdmin,
-  deleteUserAdmin
+  deleteUserAdmin,
+  getAdminRiskAnalytics
 } = require("../controllers/predictionController");
 const { protect, admin } = require("../middleware/authMiddleware");
 const upload = require("../middleware/uploadMiddleware");
 
 router.post("/upload", protect, upload.single("file"), createPrediction);
+router.get("/admin/analytics/risk", protect, admin, getAdminRiskAnalytics);
 router.get("/admin/all-predictions", protect, admin, getAllPredictionsAdmin);
 router.get("/admin/all-users", protect, admin, getAllUsersAdmin);
 router.put("/admin/users/:id", protect, admin, updateUserAdmin);

@@ -24,7 +24,7 @@ def extract_voice_features(audio_path: str):
         # Audio length check (minimum 1.5s duration threshold)
         duration_sec = len(y) / float(sr)
         if duration_sec < 1.5:
-            raise ValueError(f"Audio sample duration ({duration_sec:.1f}s) is too short. Minimum duration is 2.0 seconds.")
+            raise ValueError(f"Audio sample duration ({duration_sec:.1f}s) is too short. Minimum duration is 1.5 seconds.")
 
         # Silence / low volume check using RMS amplitude
         rms_energy = float(np.sqrt(np.mean(y ** 2)))

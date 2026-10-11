@@ -41,6 +41,23 @@ const PredictionSchema = new mongoose.Schema(
       type: String,
       default: ""
     },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    reviewedAt: {
+      type: Date,
+      default: null
+    },
+    notesUpdatedAt: {
+      type: Date,
+      default: null
+    },
+    recommendationUpdatedAt: {
+      type: Date,
+      default: null
+    },
     globalFeatureImportances: {
       type: Map,
       of: Number,
@@ -52,7 +69,11 @@ const PredictionSchema = new mongoose.Schema(
     }
   },
   { timestamps: true }
-
 );
+
+// Indexes for optimizing prediction queries and administrative risk analytics
+PredictionSchema.index({ user: 1, createdAt: -1 });
+PredictionSchema.index({ createdAt: -1 });
+PredictionSchema.index({ riskLevel: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Prediction", PredictionSchema);

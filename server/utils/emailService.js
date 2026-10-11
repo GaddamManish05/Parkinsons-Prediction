@@ -6,12 +6,24 @@ const axios = require("axios");
  * Dispatches asynchronously with safe exception handling so primary API requests never fail due to email errors.
  */
 const sendBrevoEmail = async ({ toEmail, toName, subject, htmlContent }) => {
-  const apiKey = process.env.BREVO_API_KEY;
-  const fromEmail = process.env.EMAIL_FROM || "no-reply@parkinson-research.org";
-  const fromName = process.env.EMAIL_FROM_NAME || "Parkinson's Assessment Portal";
+  const apiKey = process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.trim() : "";
+  const fromEmail = (process.env.EMAIL_FROM || "no-reply@parkinson-research.org").trim();
+  const fromName = (process.env.EMAIL_FROM_NAME || "Parkinson's Assessment Portal").trim();
 
-  if (!apiKey || apiKey.trim() === "" || apiKey === "replace_with_real_brevo_api_key") {
-    // Non-blocking log warning when unconfigured
+  // Helper check for empty or placeholder configuration values
+  const isPlaceholderKey = (key) => {
+    if (!key || key === "") return true;
+    const lower = key.toLowerCase();
+    return (
+      lower.includes("replace_with") ||
+      lower.includes("your_brevo_api_key") ||
+      lower.includes("your_api_key") ||
+      lower === "dummy" ||
+      lower === "placeholder"
+    );
+  };
+
+  if (isPlaceholderKey(apiKey)) {
     return { success: false, skipped: true, reason: "BREVO_API_KEY_NOT_CONFIGURED" };
   }
 
@@ -25,7 +37,7 @@ const sendBrevoEmail = async ({ toEmail, toName, subject, htmlContent }) => {
 
     const response = await axios.post("https://api.brevo.com/v3/smtp/email", payload, {
       headers: {
-        "api-key": apiKey.trim(),
+        "api-key": apiKey,
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -35,9 +47,18 @@ const sendBrevoEmail = async ({ toEmail, toName, subject, htmlContent }) => {
     const messageId = response.data?.messageId || "sent";
     return { success: true, messageId };
   } catch (err) {
-    const statusCode = err.response?.status;
+    const statusCode = err.response?.status || 500;
     const errorMsg = err.response?.data?.message || err.message;
-    console.error(`Brevo Email Delivery Notice [Status ${statusCode || 500}]: ${errorMsg}`);
+
+    if (statusCode === 401) {
+      console.error(
+        `Brevo Email Delivery Notice [Status 401]: Key unauthorized (${errorMsg}). ` +
+        `Verify BREVO_API_KEY in root .env is an active Brevo REST API v3 Key (e.g. xkeysib-...) rather than an SMTP key (xsmtpsib-...) and that sender email is verified in Brevo dashboard.`
+      );
+    } else {
+      console.error(`Brevo Email Delivery Notice [Status ${statusCode}]: ${errorMsg}`);
+    }
+
     return { success: false, error: errorMsg, statusCode };
   }
 };

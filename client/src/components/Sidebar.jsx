@@ -109,8 +109,7 @@ export default function Sidebar() {
 
             <button 
               onClick={handleLogout} 
-              className="sidebar-link" 
-              style={{ background: "transparent", border: "none", width: "100%", textAlign: "left", cursor: "pointer", marginTop: "auto", borderTop: "1px solid var(--border-color)", paddingTop: "20px" }}
+              className="sidebar-link sidebar-logout"
             >
               <FaSignOutAlt />
               <span>Logout</span>
