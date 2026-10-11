@@ -564,7 +564,7 @@ export default function AdminDashboard() {
               <div className="section-card mt-8">
                 <h3 className="section-title" style={{ marginBottom: "16px" }}>Recent Patient Activity</h3>
                 <div className="table-responsive">
-                  <table className="recent-table">
+                  <table className="recent-table table-overview">
                     <thead>
                       <tr>
                         <th>Date & Time</th>
@@ -653,10 +653,10 @@ export default function AdminDashboard() {
               </div>
 
               <div className="table-responsive">
-                <table className="recent-table">
+                <table className="recent-table table-patients">
                   <thead>
                     <tr>
-                      <th style={{ width: "40px", textAlign: "center" }}>
+                      <th style={{ textAlign: "center" }}>
                         <input
                           type="checkbox"
                           checked={selectedUserIds.length === processedUsers.length && processedUsers.length > 0}
@@ -674,7 +674,7 @@ export default function AdminDashboard() {
                       <th>Email Address</th>
                       <th style={{ textAlign: "center" }}>Total Predictions</th>
                       <th style={{ textAlign: "center" }}>Status</th>
-                      <th className="actions-col" style={{ textAlign: "right" }}>Actions</th>
+                      <th className="actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -724,7 +724,7 @@ export default function AdminDashboard() {
                               )}
                             </button>
                           </td>
-                          <td className="actions-col" style={{ textAlign: "right" }}>
+                          <td className="actions-col">
                             <div className="actions-cell">
                               <button
                                 type="button"
@@ -798,7 +798,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="table-responsive">
-                <table className="recent-table">
+                <table className="recent-table table-reports">
                   <thead>
                     <tr>
                       <th>Date</th>
@@ -807,7 +807,7 @@ export default function AdminDashboard() {
                       <th>Outcome</th>
                       <th>Confidence</th>
                       <th>Doctor Review</th>
-                      <th className="actions-col" style={{ textAlign: "right" }}>Actions</th>
+                      <th className="actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -846,7 +846,7 @@ export default function AdminDashboard() {
                               <span className="badge badge-high" style={{ textTransform: "capitalize" }}>Awaiting Review</span>
                             )}
                           </td>
-                          <td className="actions-col" style={{ textAlign: "right" }}>
+                          <td className="actions-col">
                             <div className="actions-cell">
                               <button
                                 type="button"
@@ -928,7 +928,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="table-responsive">
-                <table className="recent-table">
+                <table className="recent-table table-risks">
                   <thead>
                     <tr>
                       <th>Prediction Date</th>
@@ -936,7 +936,7 @@ export default function AdminDashboard() {
                       <th>Email</th>
                       <th>Risk Classification</th>
                       <th>Confidence Score</th>
-                      <th className="actions-col" style={{ textAlign: "right" }}>Actions</th>
+                      <th className="actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -962,7 +962,7 @@ export default function AdminDashboard() {
                           </td>
                           <td><span className={`badge ${getRiskClass(p.riskLevel)}`}>{p.riskLevel} Risk</span></td>
                           <td className="font-bold font-mono" style={{ color: getRiskColor(p.riskLevel) }}>{p.confidence.toFixed(2)}%</td>
-                          <td className="actions-col" style={{ textAlign: "right" }}>
+                          <td className="actions-col">
                             <div className="actions-cell">
                               <button
                                 type="button"
@@ -1020,14 +1020,14 @@ export default function AdminDashboard() {
               </div>
 
               <div className="table-responsive">
-                <table className="recent-table">
+                <table className="recent-table table-notes">
                   <thead>
                     <tr>
                       <th>Patient Name</th>
                       <th>Risk Level</th>
                       <th>Last Assessment Date</th>
                       <th>Medical Notes</th>
-                      <th className="actions-col" style={{ textAlign: "right" }}>Actions</th>
+                      <th className="actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1059,7 +1059,7 @@ export default function AdminDashboard() {
                                 </div>
                               )}
                             </td>
-                            <td className="actions-col" style={{ textAlign: "right" }}>
+                            <td className="actions-col">
                               <div className="actions-cell">
                                 <button
                                   type="button"
@@ -1108,13 +1108,13 @@ export default function AdminDashboard() {
               </div>
 
               <div className="table-responsive">
-                <table className="recent-table">
+                <table className="recent-table table-recs">
                   <thead>
                     <tr>
                       <th>Patient Name</th>
                       <th>Last Assessment Date</th>
                       <th>Recommendation Action</th>
-                      <th className="actions-col" style={{ textAlign: "right" }}>Actions</th>
+                      <th className="actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1147,7 +1147,7 @@ export default function AdminDashboard() {
                                 </div>
                               )}
                             </td>
-                            <td className="actions-col" style={{ textAlign: "right" }}>
+                            <td className="actions-col">
                               <div className="actions-cell">
                                 <button
                                   type="button"
@@ -1533,7 +1533,7 @@ export default function AdminDashboard() {
                     <p style={{ color: "var(--text-light)", marginTop: "20px" }}>No critical patient sequences detected.</p>
                   ) : (
                     <div className="table-responsive" style={{ marginTop: "14px" }}>
-                      <table className="recent-table">
+                      <table className="recent-table table-insights-critical">
                         <thead>
                           <tr>
                             <th>Patient Name</th>
@@ -1562,7 +1562,7 @@ export default function AdminDashboard() {
                   <h3 className="section-title">Most Active Patients</h3>
                   <p className="section-subtitle">Patients logged most frequently on the platform.</p>
                   <div className="table-responsive" style={{ marginTop: "14px" }}>
-                    <table className="recent-table">
+                    <table className="recent-table table-insights-active">
                       <thead>
                         <tr>
                           <th>Patient Name</th>
@@ -2114,14 +2114,14 @@ export default function AdminDashboard() {
               <p style={{ color: "var(--text-light)", padding: "20px 0", textAlign: "center" }}>No screenings logged for this patient.</p>
             ) : (
               <div className="table-responsive">
-                <table className="recent-table">
+                <table className="recent-table table-history">
                   <thead>
                     <tr>
                       <th>Date</th>
                       <th>Risk Outcome</th>
                       <th>Confidence</th>
                       <th>Acoustic Metrics</th>
-                      <th className="actions-col" style={{ textAlign: "right" }}>Actions</th>
+                      <th className="actions-col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2140,7 +2140,7 @@ export default function AdminDashboard() {
                           <td style={{ fontSize: "12px" }}>
                             fo: {p.features?.fo !== undefined ? Number(p.features.fo).toFixed(2) : "N/A"} Hz | Jitter: {p.features?.jitter_local !== undefined ? Number(p.features.jitter_local).toFixed(4) : "N/A"}
                           </td>
-                          <td className="actions-col" style={{ textAlign: "right" }}>
+                          <td className="actions-col">
                             <div className="actions-cell">
                               <button
                                 type="button"

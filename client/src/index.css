@@ -507,13 +507,14 @@ h1, h2, h3, h4, h5, h6 {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
+  padding: 5px 12px;
   border-radius: 30px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 .badge-low {
@@ -830,9 +831,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .recent-table, .feature-table {
   width: 100%;
-  min-width: 760px;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   text-align: left;
 }
 
@@ -844,6 +843,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   font-size: 13px;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 [data-theme="dark"] .recent-table th,
@@ -864,51 +864,40 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(2, 132, 199, 0.04);
 }
 
-/* Sticky Actions Column */
+[data-theme="dark"] .recent-table tbody tr:hover td,
+[data-theme="dark"] .feature-table tbody tr:hover td {
+  background: rgba(2, 132, 199, 0.08);
+}
+
+/* Actions Column & Buttons (In natural table flow - never covers adjacent columns) */
 .recent-table th.actions-col,
 .recent-table td.actions-col {
-  position: sticky;
-  right: 0;
-  background: #ffffff;
-  z-index: 5;
-  box-shadow: -5px 0 10px rgba(15, 23, 42, 0.07);
+  text-align: right;
   white-space: nowrap;
-  padding: 10px 14px;
-}
-
-[data-theme="dark"] .recent-table th.actions-col,
-[data-theme="dark"] .recent-table td.actions-col {
-  background: #0f172a;
-  box-shadow: -5px 0 12px rgba(0, 0, 0, 0.45);
-}
-
-.recent-table th.actions-col {
-  z-index: 6;
-  background: #f8fafc;
-}
-
-[data-theme="dark"] .recent-table th.actions-col {
-  background: #131b2e;
-}
-
-.recent-table tbody tr:hover td.actions-col {
-  background: #f0f9ff;
-}
-
-[data-theme="dark"] .recent-table tbody tr:hover td.actions-col {
-  background: #1e293b;
+  vertical-align: middle;
 }
 
 .actions-cell {
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+  justify-content: flex-end;
   white-space: nowrap;
 }
 
-.actions-cell button {
+.actions-cell button,
+.actions-cell .btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.2;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 /* Table cell truncation and date formatting */
@@ -917,6 +906,7 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
 }
 
 .table-truncate-email {
@@ -924,6 +914,7 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
 }
 
 .table-truncate-notes {
@@ -931,7 +922,73 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
 }
+
+/* Table-Specific Sizing & Column Alignment */
+.table-risks { min-width: 900px; }
+.table-risks th:nth-child(1), .table-risks td:nth-child(1) { width: 130px; } /* Prediction Date */
+.table-risks th:nth-child(2), .table-risks td:nth-child(2) { width: 150px; } /* Patient Name */
+.table-risks th:nth-child(3), .table-risks td:nth-child(3) { width: 180px; } /* Email */
+.table-risks th:nth-child(4), .table-risks td:nth-child(4) { width: 140px; } /* Risk Classification */
+.table-risks th:nth-child(5), .table-risks td:nth-child(5) { width: 130px; white-space: nowrap; } /* Confidence Score */
+.table-risks th:nth-child(6), .table-risks td:nth-child(6) { width: 185px; text-align: right; } /* Actions */
+
+.table-reports { min-width: 960px; }
+.table-reports th:nth-child(1), .table-reports td:nth-child(1) { width: 120px; } /* Date */
+.table-reports th:nth-child(2), .table-reports td:nth-child(2) { width: 140px; } /* Patient Name */
+.table-reports th:nth-child(3), .table-reports td:nth-child(3) { width: 170px; } /* Patient Email */
+.table-reports th:nth-child(4), .table-reports td:nth-child(4) { width: 125px; } /* Outcome */
+.table-reports th:nth-child(5), .table-reports td:nth-child(5) { width: 115px; white-space: nowrap; } /* Confidence */
+.table-reports th:nth-child(6), .table-reports td:nth-child(6) { width: 135px; } /* Doctor Review */
+.table-reports th:nth-child(7), .table-reports td:nth-child(7) { width: 185px; text-align: right; } /* Actions */
+
+.table-overview { min-width: 800px; }
+.table-overview th:nth-child(1), .table-overview td:nth-child(1) { width: 130px; } /* Date & Time */
+.table-overview th:nth-child(2), .table-overview td:nth-child(2) { width: 150px; } /* Patient Name */
+.table-overview th:nth-child(3), .table-overview td:nth-child(3) { width: 180px; } /* Patient Email */
+.table-overview th:nth-child(4), .table-overview td:nth-child(4) { width: 120px; } /* Risk Outcome */
+.table-overview th:nth-child(5), .table-overview td:nth-child(5) { width: 110px; white-space: nowrap; } /* Confidence */
+.table-overview th:nth-child(6), .table-overview td:nth-child(6) { width: 110px; } /* Status */
+
+.table-patients { min-width: 880px; }
+.table-patients th:nth-child(1), .table-patients td:nth-child(1) { width: 45px; text-align: center; } /* Checkbox */
+.table-patients th:nth-child(2), .table-patients td:nth-child(2) { width: 130px; } /* Registration Date */
+.table-patients th:nth-child(3), .table-patients td:nth-child(3) { width: 150px; } /* Patient Name */
+.table-patients th:nth-child(4), .table-patients td:nth-child(4) { width: 190px; } /* Email Address */
+.table-patients th:nth-child(5), .table-patients td:nth-child(5) { width: 110px; text-align: center; } /* Total Predictions */
+.table-patients th:nth-child(6), .table-patients td:nth-child(6) { width: 80px; text-align: center; } /* Status */
+.table-patients th:nth-child(7), .table-patients td:nth-child(7) { width: 175px; text-align: right; } /* Actions */
+
+.table-notes { min-width: 820px; }
+.table-notes th:nth-child(1), .table-notes td:nth-child(1) { width: 150px; } /* Patient Name */
+.table-notes th:nth-child(2), .table-notes td:nth-child(2) { width: 110px; } /* Risk Level */
+.table-notes th:nth-child(3), .table-notes td:nth-child(3) { width: 130px; } /* Last Assessment Date */
+.table-notes th:nth-child(4), .table-notes td:nth-child(4) { width: 250px; } /* Medical Notes */
+.table-notes th:nth-child(5), .table-notes td:nth-child(5) { width: 180px; text-align: right; } /* Actions */
+
+.table-recs { min-width: 720px; }
+.table-recs th:nth-child(1), .table-recs td:nth-child(1) { width: 160px; } /* Patient Name */
+.table-recs th:nth-child(2), .table-recs td:nth-child(2) { width: 140px; } /* Last Assessment Date */
+.table-recs th:nth-child(3), .table-recs td:nth-child(3) { width: 230px; } /* Recommendation Action */
+.table-recs th:nth-child(4), .table-recs td:nth-child(4) { width: 190px; text-align: right; } /* Actions */
+
+.table-insights-critical { min-width: 380px; }
+.table-insights-critical th:nth-child(1), .table-insights-critical td:nth-child(1) { width: 45%; }
+.table-insights-critical th:nth-child(2), .table-insights-critical td:nth-child(2) { width: 30%; text-align: center; }
+.table-insights-critical th:nth-child(3), .table-insights-critical td:nth-child(3) { width: 25%; }
+
+.table-insights-active { min-width: 400px; }
+.table-insights-active th:nth-child(1), .table-insights-active td:nth-child(1) { width: 40%; }
+.table-insights-active th:nth-child(2), .table-insights-active td:nth-child(2) { width: 40%; }
+.table-insights-active th:nth-child(3), .table-insights-active td:nth-child(3) { width: 20%; text-align: center; }
+
+.table-history { min-width: 700px; }
+.table-history th:nth-child(1), .table-history td:nth-child(1) { width: 120px; } /* Date */
+.table-history th:nth-child(2), .table-history td:nth-child(2) { width: 120px; } /* Risk Outcome */
+.table-history th:nth-child(3), .table-history td:nth-child(3) { width: 100px; white-space: nowrap; } /* Confidence */
+.table-history th:nth-child(4), .table-history td:nth-child(4) { width: 200px; } /* Acoustic Metrics */
+.table-history th:nth-child(5), .table-history td:nth-child(5) { width: 160px; text-align: right; } /* Actions */
 
 .table-date-cell {
   display: flex;
