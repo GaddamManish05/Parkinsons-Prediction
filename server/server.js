@@ -114,7 +114,7 @@ app.get("/api/health/ml", async (req, res) => {
   }
   const pythonServiceUrl = rawPythonUrl.trim().replace(/\/+$/, "");
   try {
-    const timeoutMs = parseInt(process.env.PYTHON_HEALTH_TIMEOUT_MS, 10) || 10000;
+    const timeoutMs = parseInt(process.env.PYTHON_HEALTH_TIMEOUT_MS, 10) || 60000;
     const mlRes = await axios.get(`${pythonServiceUrl}/health`, { timeout: timeoutMs });
     res.json({
       status: "UP",

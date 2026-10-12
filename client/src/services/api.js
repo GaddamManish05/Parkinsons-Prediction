@@ -7,7 +7,7 @@ const baseURL = rawBaseURL.replace(/\/+$/, "");
 
 const API = axios.create({
   baseURL, // Points to production backend (e.g. Render) when configured, or relative path in local dev
-  timeout: 30000 // 30 seconds timeout for processing speech inference
+  timeout: 90000 // 90 seconds timeout accommodating Render free-tier cold starts
 });
 
 // Request interceptor to automatically attach authorization header

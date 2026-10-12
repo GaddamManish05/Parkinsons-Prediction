@@ -25,27 +25,46 @@ const createPrediction = async (req, res) => {
     const formData = new FormData();
     formData.append("file", blob, req.file.originalname);
 
-    // Call Python ML microservice (60s timeout accommodates Render free-tier cold starts)
+    // Call Python ML microservice with cold-start resilience & retry (60s timeout accommodates Render free-tier cold starts)
     let mlResponse;
-    try {
-      mlResponse = await axios.post(`${pythonServiceUrl}/predict`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data"
-        },
-        timeout: 60000
-      });
-    } catch (mlErr) {
-      console.error("ML service communication failed:", mlErr.message);
-      // Clean up uploaded file on processing error
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        mlResponse = await axios.post(`${pythonServiceUrl}/predict`, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data"
+          },
+          timeout: 60000
+        });
+        break;
+      } catch (mlErr) {
+        const isRetryable =
+          attempt < maxAttempts &&
+          (mlErr.code === "ECONNABORTED" ||
+           mlErr.code === "ECONNRESET" ||
+           mlErr.code === "ECONNREFUSED" ||
+           !mlErr.response ||
+           mlErr.response.status === 502 ||
+           mlErr.response.status === 504);
+
+        if (isRetryable) {
+          console.warn(`ML service attempt ${attempt} failed (${mlErr.message}). Retrying in 2s for cold-start recovery...`);
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+
+        console.error("ML service communication failed:", mlErr.message);
+        // Clean up uploaded file on processing error
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+        const statusCode = mlErr.response?.status || 502;
+        const detailMsg = mlErr.response?.data?.detail || "Machine learning microservice unavailable or returned an error";
+        return res.status(statusCode).json({
+          message: detailMsg,
+          error: mlErr.message
+        });
       }
-      const statusCode = mlErr.response?.status || 502;
-      const detailMsg = mlErr.response?.data?.detail || "Machine learning microservice unavailable or returned an error";
-      return res.status(statusCode).json({
-        message: detailMsg,
-        error: mlErr.message
-      });
     }
 
     const { features, label, probability, confidence, riskLevel, modelVersion, globalFeatureImportances, featureDeviations } = mlResponse.data;

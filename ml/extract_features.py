@@ -36,14 +36,8 @@ def extract_voice_features(audio_path: str):
         if len(y_trimmed) == 0:
             y_trimmed = y # fallback if trimming empty
             
-        # Save a temporary wav for parselmouth to read if needed
-        temp_wav_path = audio_path + "_temp.wav"
-        import soundfile as sf
-        sf.write(temp_wav_path, y_trimmed, 16000)
-
-        
-        # Load into parselmouth
-        sound = parselmouth.Sound(temp_wav_path)
+        # Load directly into parselmouth in memory (avoids temporary file I/O and disk write race conditions)
+        sound = parselmouth.Sound(y_trimmed, sampling_frequency=16000)
         
         # Pitch extraction (F0)
         pitch = call(sound, "To Pitch", 0.0, 75.0, 600.0)
@@ -104,10 +98,6 @@ def extract_voice_features(audio_path: str):
             spread2_approx = 0.25
             d2_approx = 2.2
             
-        # Clean up temp file
-        if os.path.exists(temp_wav_path):
-            os.remove(temp_wav_path)
-            
         # Build features dict
         features = {
             "fo": clean_value(mean_f0, 150.0),
@@ -137,12 +127,7 @@ def extract_voice_features(audio_path: str):
         return features
 
     except ValueError as ve:
-        if 'temp_wav_path' in locals() and os.path.exists(temp_wav_path):
-            os.remove(temp_wav_path)
         raise ve
     except Exception as e:
-        # Cleanup if files exist
-        if 'temp_wav_path' in locals() and os.path.exists(temp_wav_path):
-            os.remove(temp_wav_path)
         raise RuntimeError(f"Feature extraction failed: {str(e)}")
 

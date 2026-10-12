@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import time
+import uuid
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from extract_features import extract_voice_features
@@ -31,9 +32,9 @@ async def predict_voice(file: UploadFile = File(...)):
     if ext not in [".wav", ".mp3", ".webm", ".ogg"]:
         raise HTTPException(status_code=400, detail="Invalid audio format. Only WAV, MP3, WEBM, and OGG are supported.")
         
-    # Save the uploaded file to a temporary file
+    # Save the uploaded file to a collision-free temporary file
     temp_dir = tempfile.gettempdir()
-    temp_file_path = os.path.join(temp_dir, f"upload_{int(time.time())}{ext}")
+    temp_file_path = os.path.join(temp_dir, f"upload_{int(time.time())}_{uuid.uuid4().hex}{ext}")
     
     try:
         with open(temp_file_path, "wb") as buffer:
@@ -80,7 +81,7 @@ async def extract_features_only(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Invalid audio format. Only WAV and MP3 are supported.")
         
     temp_dir = tempfile.gettempdir()
-    temp_file_path = os.path.join(temp_dir, f"extract_{int(time.time())}{ext}")
+    temp_file_path = os.path.join(temp_dir, f"extract_{int(time.time())}_{uuid.uuid4().hex}{ext}")
     
     try:
         with open(temp_file_path, "wb") as buffer:
@@ -98,4 +99,5 @@ async def extract_features_only(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
